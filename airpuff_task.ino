@@ -41,8 +41,18 @@ unsigned long ITI_setting = random(2000,4000);
 unsigned long ITI = ITI_setting;
 
                                                                                                                                
-int trial_limit = 10;
-int trial_type_array[10] = {1,1,1,1,1,1,1,1,2,3};
+const int trial_limit = 8;
+// remainder trials will be put into type1
+double prop_type1 = .4;
+double prop_type2 = .3;
+double prop_type3 = .2;
+
+int int_type1 = floor(trial_limit*prop_type1);
+int int_type2 = floor(trial_limit*prop_type2);
+int int_type3 = floor(trial_limit*prop_type3);
+
+int trial_type_array[trial_limit-1] = {};
+
 int correct_trials_threshold = 250;
 int number_of_switches_threshold = 20;                                                                                                                           
 int consecutive_timeOut_threshold = 20; 
@@ -170,8 +180,7 @@ Encoder myEnc(2,3);
 
 void setup() {
   Serial.begin(115200);
-  ShuffleTrialTypes();
-  lcd.begin();
+//  lcd.begin();
   // Turn on the blacklight and print a message.
   lcd.backlight();
   randomSeed(analogRead(R));
@@ -186,11 +195,39 @@ void setup() {
   strip.begin();
   strip.setBrightness(10);
   strip.show();
-    
-        
-  
   t_1 = millis(); //stored time
 
+  
+  if(prop_type1+prop_type2+prop_type3!=1.0){
+    Serial.println("Trial type proportions do not add up to 100%");
+    delay(100);
+    exit(0);
+  }
+
+  // will populate the trial_type_array according to set proportions, rounding down
+  int indx = 0;
+  for (int j = 0; j<int_type1;j++){
+      trial_type_array[indx] = 1;
+      indx++;
+  }
+  for (int j = 0; j<int_type2;j++){
+      trial_type_array[indx] = 2;
+      indx++;
+  }
+  for (int j = 0; j<int_type3;j++){
+      trial_type_array[indx] = 3;
+      indx++;
+  }
+  ShuffleTrialTypes();
+  for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
+    if(trial_type_array[i]==0){
+      trial_type_array[i]=1;
+    }
+  }
+
+  for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
+    Serial.print(String(trial_type_array[i]) + "||");
+  }
   phase = 1;
   second_state = -1;
   transition = -1;
@@ -327,7 +364,6 @@ void loop() {
     }
 //    forced = 1;
     switch(phase){ 
-
       case 1: // quiescent phase
         last_encoder_value = abs((360.0*myEnc.read())/resolution);
         if(last_encoder_value>=2.0){
@@ -342,9 +378,6 @@ void loop() {
           strip.clear();
           strip.show();
           Serial.println("End Quiescent");
-
-
-
 
           if(behavior_phase==1){
                         // Roll for trial type
@@ -362,6 +395,9 @@ void loop() {
             }
             if(trial_type==2){
               phase=4;// air puff phase
+            }
+            if(trial_type==0){
+              
             }
           }
           if(behavior_phase==2){
@@ -806,56 +842,6 @@ int get_led_position(double angle,double degrees_per_led,int leds){
   return led_pos;
 }
 
-
-//int transition_assignment(int turn, int common_transition_probability, int forced){
-//  state_value = random(0,101);
-//  if (state_value <= common_transition_probability) {
-//    transition = 1;     // common
-//  }
-//  else { 
-//    transition = 2;
-//    } // uncommon
-//
-//    
-//  switch(turn){
-//    case 0:
-//        if (transition == 1) {   // If Left --> common = patternA
-//            //lcd.clear();
-//            //lcd.print("Common Transition");
-//            second_state = 0;
-//            patternA();
-//            tone(toneA_pin,patternA_tone_freq,second_step_length);
-//            return(second_state);
-//            break;
-//        }
-//        if (transition == 2) {  // If Left --> uncommon = patternB
-//            //lcd.print("Uncommon Transition");
-//            second_state = 1;
-//            patternB();
-//            tone(toneB_pin,patternB_tone_freq,second_step_length);
-//            return(second_state);
-//            break;
-//        }
-//    case 1:
-//        if (transition == 1) {   // If Right --> common = patternB
-//            //lcd.print("Common Transition");    
-//            second_state = 1;
-//            patternB();
-//            tone(toneB_pin,patternB_tone_freq,second_step_length);
-//            return(second_state);
-//            break;
-//        }
-//        if (transition == 2) {   // If Right --> uncommon = patternA
-//            //lcd.print("Uncommon Transition");
-//            second_state = 0;
-//            patternA();
-//            tone(toneA_pin,patternA_tone_freq,second_step_length);
-//            return(second_state);
-//            break;
-//        }
-//  }
-//}
-
 int force_encoder(int forced, int side,int last_enc_val,int current_enc_val){
   if(forced==1){
     if(side==0){//need to turn left, encoder value must decrease
@@ -886,14 +872,11 @@ int force_encoder(int forced, int side,int last_enc_val,int current_enc_val){
 }
 
 void ShuffleTrialTypes () {
-  for (int i = 0; i < 10; i++) {
-    int n = random(0,9);
+  for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
+    int n = random(0,sizeof(trial_type_array) / sizeof(trial_type_array[0]));
     int temp = trial_type_array[n];
     trial_type_array[n] = trial_type_array[i];
     trial_type_array[i] = temp;
+    
   }
-  for (int i = 0; i < 10; i++) {
-    Serial.print(trial_type_array[i]);Serial.print("");
-  }
-  Serial.println("||");
 }
