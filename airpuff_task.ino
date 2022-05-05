@@ -40,7 +40,6 @@ int reward_delay = 3000; // time between screen to black and reward
 unsigned long ITI_setting = random(2000,4000);
 unsigned long ITI = ITI_setting;
 
-int behavior_phase = 1 ;// phase 1: forced trials only, phase 2: forced trials + airpuff, phase 3: forced, tone+puff, forced+tone; phase 4: tone+puff, forced+tone, free+tone
 int trial_limit = 20;
 
 const int block_length = 10;
@@ -48,9 +47,10 @@ int extra_trials_in_type1 = 0;
 
 // proportions are used only for phase 2,3,4
 // remainder trials will be put into type1
-double prop_type1 = .8;
-double prop_type2 = 0.2;
-double prop_type3 = 0;
+double prop_type1 = .8; // only forced trials
+double prop_type2 = 0.2; // only tone + airpuff trials
+double prop_type3 = 0; // tone + forced
+double prop_type4 = 0; // tone + free
 int rebound_delay_time = 250;
 
 // type 1: forced trial no tone
@@ -59,6 +59,7 @@ int rebound_delay_time = 250;
 int int_type1 = floor(block_length*prop_type1);
 int int_type2 = floor(block_length*prop_type2);
 int int_type3 = floor(block_length*prop_type3);
+int int_type4 = floor(block_length*prop_type4);
 
 int trial_type_array[block_length] = {};
 
@@ -84,8 +85,8 @@ unsigned long air_puff_open_time = 40;
 //4.
 //double common_transition_probability = 0.8;
 //5.
-double high_reward_prob = 1;
-double low_reward_prob = 0;
+double high_avoid_prob = 1; //prob of avoidance if turned to correct side
+double low_avoid_prob = 0;  //prob of avoidance if turned to incorrect side
 //6.
 int plus_trials = 0;
 //7.
@@ -229,6 +230,10 @@ void setup() {
       trial_type_array[indx] = 3;
       indx++;
   }
+  for (int j = 0; j<int_type4;j++){
+      trial_type_array[indx] = 4;
+      indx++;
+  }
   ShuffleTrialTypes();
   Serial.println("There are " + String(extra_trials_in_type1) + " extra type 1 trials");
 
@@ -336,8 +341,8 @@ void setup() {
       params.println("forced_threshold_lower:"+String(forced_threshold_lower));
       params.println("sol_open_time:"+String(sol_open_time));
 //      params.println("common_transition_probability:"+String(common_transition_probability));
-      params.println("high_reward_prob:"+String(high_reward_prob));
-      params.println("low_reward_prob:"+String(low_reward_prob));
+      params.println("high_reward_prob:"+String(high_avoid_prob));
+      params.println("low_reward_prob:"+String(low_avoid_prob));
       params.println("plus_trials:"+String(plus_trials));   
       params.println("switch_criteria_trials_range_low:"+String(switch_criteria_trials_range_low));    
       params.println("switch_criteria_trials_range_high:"+String(switch_criteria_trials_range_high));    
@@ -386,25 +391,24 @@ void loop() {
           strip.show();
           Serial.println("End Quiescent");
 
-          if(behavior_phase==1){
-                        // Roll for trial type
-            // 1: Forced only, no puff, water reward
-            // 2: puff only, no choice, reward
-            // 3: forced choice, puff punishment, water reward
-            trial_type = trial_type_array[next_trial_type_indx];
-            Serial.println(trial_type);
-            if(trial_type==1 or trial_type==3){
-              forced=1;
-              setTarget2(forced, correct_side);
-              phase = 2;
-              Serial.println("Forced: " + String(forced));
-              Serial.println("Correct Side: " + String(correct_side));
-            }
-            if(trial_type==2){
-              phase=4;// air puff phase
-            }
+          // Roll for trial type
+          // 1: Forced only, no puff, water reward
+          // 2: puff only, no choice, reward
+          // 3: forced choice, puff punishment, water reward
+          // 4: free choice, one direction will recieve air puff 100% of time, other direction won't 100% of time
+          trial_type = trial_type_array[next_trial_type_indx];
+          Serial.println(trial_type);
+          if(trial_type==1 or trial_type==3){
+            forced=1;
+            setTarget2(forced, correct_side);
+            phase = 2;
+            Serial.println("Forced: " + String(forced));
+            Serial.println("Correct Side: " + String(correct_side));
           }
-          if(behavior_phase==2){
+          if(trial_type==2){
+            phase=4;// air puff phase
+          }
+          if(trial_type==4){
             forced=0;
             setTarget2(forced, correct_side);
             phase=2;
@@ -432,7 +436,7 @@ void loop() {
         enc_val = force_encoder(forced,correct_side,last_enc_val,myEnc.read(),t); 
 
         
-        if(trial_type==3 or behavior_phase==2){ // tone should play until move out of phase 3
+        if(trial_type==3 or trial_type==4){ // tone should play until move out of phase 3
           tone(toneA_pin,10000,100);
         }
         led_pos = 119 +get_led_position(((360.0*enc_val))/resolution,degrees_per_led,pixels);
@@ -475,6 +479,7 @@ void loop() {
               correct = 1;  
              }
              if (turn == 1) {
+              // incorrect choices are only possible with free trials
               Serial.println("Incorrect Choice!");
               incorrect_trials +=1;
               correct = 0;
@@ -486,6 +491,7 @@ void loop() {
             led_pos = 0;
                         
             if (turn == 0) {
+              // incorrect choices are only possible with free trials
               Serial.println("Incorrect Choice!");
               incorrect_trials +=1;
               correct = 0;
@@ -509,7 +515,7 @@ void loop() {
         if(trial_type==1){ // skip to ITI on timeout for type 1
           phase=8;
         }
-        if(trial_type==3){ // go to timeout for type 3
+        if(trial_type==3 or trial_type==4){ // go to timeout for type 3/4
           phase=4;
         }
         t_1 = t;
@@ -531,7 +537,7 @@ void loop() {
         myEnc.readAndReset();
         break;
         
-      //reward roll phase
+      //non-timeout  phase
       case 5:
       
         strip.clear();
@@ -546,22 +552,32 @@ void loop() {
               Serial.println("Reward!");
            }
           else {
-            phase=8;// go to airpuff
+            phase=8;// go to ITI
             Serial.println("No Reward!");
             }
         }
-        if(trial_type==3){ // Trial type 3 can get air puff or reward
-          t_1 = t; 
+        if(trial_type==3 or trial_type==4){
+          t_1 = t;
+          int roll = random(0,101);
+          Serial.println("Avoid Roll: " + String(roll));
+          // if the turn was correct, follow high avoid prob, else follow low avoid prob
           if(correct==1){
-              phase = 6;
-              reward = 1;
-              correct_trials +=1;
+            if(roll>high_avoid_prob){
+              phase=9; // air puff
+              Serial.println("Air puff!");
+            }else{
+              phase=6; // avoid and reward
               Serial.println("Reward!");
-           }
-          else {
-            phase=4;// go to tone->air puff
-            Serial.println("No Reward!");
             }
+          }else{
+            if(roll>low_avoid_prob){
+              phase=9;
+              Serial.println("Air puff!");
+            }else{
+              phase=6; // avoid and reward
+              Serial.println("Reward!");
+            }
+          }
         }
             
         lcd.setCursor(0,1);
@@ -590,35 +606,29 @@ void loop() {
       case 8:
         
         if ((t-t_1) >= ITI) {
-          if(behavior_phase==1){
-            Serial.println(String(next_trial_type_indx)+ " " + String(sizeof(trial_type_array) / sizeof(trial_type_array[0])));
-            if(next_trial_type_indx==sizeof(trial_type_array) / sizeof(trial_type_array[0]) - 1){
-              next_trial_type_indx=0;
-              ShuffleTrialTypes();
-              for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++){
-                if(trial_type_array[i]==0){
-                  trial_type_array[i]=1;
-                  extra_trials_in_type1++;
-                }
+          Serial.println(String(next_trial_type_indx)+ " " + String(sizeof(trial_type_array) / sizeof(trial_type_array[0])));
+          if(next_trial_type_indx==sizeof(trial_type_array) / sizeof(trial_type_array[0]) - 1){
+            next_trial_type_indx=0;
+            ShuffleTrialTypes();
+            for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++){ // converting any 0s to 1 in the trial_type array
+              if(trial_type_array[i]==0){
+                trial_type_array[i]=1;
+                extra_trials_in_type1++;
               }
-              for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
-                Serial.print(String(trial_type_array[i]) + "||");
-              }
-              number_of_switches++;
-              trials_since_switch=0;
-              if(correct_side==0){
-                correct_side = 1;
-              }else{
-                correct_side = 0;
-              }
-            }else{
-              next_trial_type_indx+=1;
-              trials_since_switch++;
             }
-          }
-          if(behavior_phase==2){
-            //TODO: Add plus trial
-            //TODO: Add switch criteria
+            for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
+              Serial.print(String(trial_type_array[i]) + "||");
+            }
+            number_of_switches++;
+            trials_since_switch=0;
+            if(correct_side==0){
+              correct_side = 1;
+            }else{
+              correct_side = 0;
+            }
+          }else{
+            next_trial_type_indx+=1;
+            trials_since_switch++;
           }
 
           lcd.clear();
@@ -656,7 +666,7 @@ void loop() {
       case 10: // Turn off air puff solonoid
        if ((t-t_1) >= air_puff_open_time) {
          digitalWrite(air_puff_pin, LOW);
-         if (trial_type==2){
+         if (trial_type==2 or correct!=2){ // trial_type 2 or 
           phase = 6;
          }else{
           phase = 8;
@@ -664,7 +674,6 @@ void loop() {
          t_1= t;
         }
         break;
-        
     }
 
     // SD Card saving

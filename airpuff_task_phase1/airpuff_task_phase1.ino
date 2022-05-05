@@ -40,11 +40,8 @@ int reward_delay = 3000; // time between screen to black and reward
 unsigned long ITI_setting = random(2000,4000);
 unsigned long ITI = ITI_setting;
 
-int behavior_phase = 1 ;// phase 1: forced trials only, phase 2: forced trials + airpuff, phase 3: forced, tone+puff, forced+tone; phase 4: tone+puff, forced+tone, free+tone
 int trial_limit = 20;
-
-const int block_length = random(1,10);
-int extra_trials_in_type1 = 0;
+const int block_length = random(1,6);
 
 int rebound_delay_time = 250;
 
