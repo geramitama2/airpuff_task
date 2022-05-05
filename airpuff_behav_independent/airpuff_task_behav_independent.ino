@@ -45,13 +45,14 @@ int trial_limit = 20;
 const int block_length = 10;
 int extra_trials_in_type1 = 0;
 
+int rebound_delay_time = 250;
+
 // proportions are used only for phase 2,3,4
 // remainder trials will be put into type1
 double prop_type1 = .8; // only forced trials
 double prop_type2 = 0.2; // only tone + airpuff trials
 double prop_type3 = 0; // tone + forced
 double prop_type4 = 0; // tone + free
-int rebound_delay_time = 250;
 
 // type 1: forced trial no tone
 // type 2: tone only + air puff
@@ -77,30 +78,16 @@ int puff_delay = 10;
 // 1.
 int correct_side = 0;
 // 2.
-double forced_threshold_lower = 0.55;
-double forced_threshold_upper = 0.75;
-  // 3. 
+
 unsigned long sol_open_time = 40;
 unsigned long air_puff_open_time = 40;
-//4.
-//double common_transition_probability = 0.8;
 //5.
 double high_avoid_prob = 1; //prob of avoidance if turned to correct side
 double low_avoid_prob = 0;  //prob of avoidance if turned to incorrect side
 //6.
 int plus_trials = 0;
-//7.
-double switch_criteria_percent_accurate = .8;
 //8.
 unsigned long session_time_threshold = 90*60000;
-
-int switch_criteria_trials_range_low = 15; 
-int switch_criteria_trials_range_high = 25; 
-int switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
-
-
-
-
 
 
 // ########Static Settings######## //  
@@ -325,28 +312,18 @@ void setup() {
       params.println("air_puff_time_delay:"+String(air_puff_time_delay));
       params.println("reward_delay:"+String(reward_delay));
       params.println("ITI_setting:"+String(ITI_setting));
-      params.println("degrees_per_led:"+String(degrees_per_led));  
-      params.println("switch_criteria_trials_range_low:"+String(switch_criteria_trials_range_low));
-      params.println("switch_criteria_trials_range_high:"+String(switch_criteria_trials_range_high));
-      params.println("switch_criteria_percent_accurate:"+String(switch_criteria_percent_accurate));
+      params.println("degrees_per_led:"+String(degrees_per_led));
       params.println("session_time_threshold:"+String(session_time_threshold));
       params.println("number_of_switches_threshold:"+String(number_of_switches_threshold));
-      params.println("switch_criteria_trials:"+String(switch_criteria_trials));
       params.println("trial_limit:"+String(trial_limit));
       params.println("correct_trials_threshold:"+String(correct_trials_threshold));
       params.println("consecutive_timeOut_threshold:"+String(consecutive_timeOut_threshold));
       
       params.println("correct_side:"+String(correct_side));
-      params.println("forced_threshold_upper:"+String(forced_threshold_upper));
-      params.println("forced_threshold_lower:"+String(forced_threshold_lower));
       params.println("sol_open_time:"+String(sol_open_time));
-//      params.println("common_transition_probability:"+String(common_transition_probability));
       params.println("high_reward_prob:"+String(high_avoid_prob));
       params.println("low_reward_prob:"+String(low_avoid_prob));
       params.println("plus_trials:"+String(plus_trials));   
-      params.println("switch_criteria_trials_range_low:"+String(switch_criteria_trials_range_low));    
-      params.println("switch_criteria_trials_range_high:"+String(switch_criteria_trials_range_high));    
-           
       params.close();
     }
     
