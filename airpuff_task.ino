@@ -40,24 +40,26 @@ int reward_delay = 3000; // time between screen to black and reward
 unsigned long ITI_setting = random(2000,4000);
 unsigned long ITI = ITI_setting;
 
-                                                                                                                               
-const int trial_limit = 8;
+int behavior_phase = 1 ;// phase 1: forced trials, phase 2: free choices
+int trial_limit = 20;
+const int block_length = 10;
+int extra_trials_in_type1 = 0;
 // remainder trials will be put into type1
-double prop_type1 = .4;
+double prop_type1 = .5;
 double prop_type2 = .3;
 double prop_type3 = .2;
+int rebound_delay_time = 250;
 
-int int_type1 = floor(trial_limit*prop_type1);
-int int_type2 = floor(trial_limit*prop_type2);
-int int_type3 = floor(trial_limit*prop_type3);
+int int_type1 = floor(block_length*prop_type1);
+int int_type2 = floor(block_length*prop_type2);
+int int_type3 = floor(block_length*prop_type3);
 
-int trial_type_array[trial_limit-1] = {};
+int trial_type_array[block_length] = {};
 
 int correct_trials_threshold = 250;
 int number_of_switches_threshold = 20;                                                                                                                           
 int consecutive_timeOut_threshold = 20; 
 
-int behavior_phase = 1 ;// phase 1: forced trials, phase 2: free choices
 int save_to_sd = 0;    
 
 
@@ -176,6 +178,9 @@ int choices_total_right = 0;
 
 bool recently_saved = false;
 int next_trial_type_indx = 0;
+unsigned long last_turned_right_ts=0;
+unsigned long last_turned_left_ts=0;
+
 Encoder myEnc(2,3);
 
 void setup() {
@@ -219,11 +224,7 @@ void setup() {
       indx++;
   }
   ShuffleTrialTypes();
-  for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
-    if(trial_type_array[i]==0){
-      trial_type_array[i]=1;
-    }
-  }
+  Serial.println("There are " + String(extra_trials_in_type1) + " extra type 1 trials");
 
   for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
     Serial.print(String(trial_type_array[i]) + "||");
@@ -384,7 +385,7 @@ void loop() {
             // 1: Forced only, no puff, water reward
             // 2: puff only, no choice, reward
             // 3: forced choice, puff punishment, water reward
-            trial_type = 1;//trial_type_array[next_trial_type_indx];
+            trial_type = trial_type_array[next_trial_type_indx];
             Serial.println(trial_type);
             if(trial_type==1 or trial_type==3){
               forced=1;
@@ -395,9 +396,6 @@ void loop() {
             }
             if(trial_type==2){
               phase=4;// air puff phase
-            }
-            if(trial_type==0){
-              
             }
           }
           if(behavior_phase==2){
@@ -425,7 +423,7 @@ void loop() {
         fix_encoder();
         // if it is a forced trial, only one side will be read in
         // if it is not a forced trial, both sides will be read normally
-        enc_val = force_encoder(forced,correct_side,last_enc_val,myEnc.read()); 
+        enc_val = force_encoder(forced,correct_side,last_enc_val,myEnc.read(),t); 
 
         
         if(trial_type==3 or behavior_phase==2){ // tone should play until move out of phase 3
@@ -587,11 +585,26 @@ void loop() {
         
         if ((t-t_1) >= ITI) {
           if(behavior_phase==1){
-            if(next_trial_type_indx==9){
+            Serial.println(String(next_trial_type_indx)+ " " + String(sizeof(trial_type_array) / sizeof(trial_type_array[0])));
+            if(next_trial_type_indx==sizeof(trial_type_array) / sizeof(trial_type_array[0]) - 1){
               next_trial_type_indx=0;
               ShuffleTrialTypes();
+              for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++){
+                if(trial_type_array[i]==0){
+                  trial_type_array[i]=1;
+                  extra_trials_in_type1++;
+                }
+              }
+              for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
+                Serial.print(String(trial_type_array[i]) + "||");
+              }
               number_of_switches++;
               trials_since_switch=0;
+              if(correct_side==0){
+                correct_side = 1;
+              }else{
+                correct_side = 0;
+              }
             }else{
               next_trial_type_indx+=1;
               trials_since_switch++;
@@ -842,26 +855,35 @@ int get_led_position(double angle,double degrees_per_led,int leds){
   return led_pos;
 }
 
-int force_encoder(int forced, int side,int last_enc_val,int current_enc_val){
+
+int force_encoder(int forced, int side,int last_enc_val,int current_enc_val,unsigned long t){
   if(forced==1){
     if(side==0){//need to turn left, encoder value must decrease
-      if(last_enc_val<current_enc_val){//if the last enc value is smaller than current(value is increasing) write last_enc_val to encoder
-        myEnc.write(last_enc_val+1);
+      if(last_enc_val<current_enc_val){//if the last enc value is smaller than current(current_enc_val is increasing) write last_enc_val to encoder
+        myEnc.write(last_enc_val);
+        last_turned_right_ts=t;
         return last_enc_val;
       }
-      else{
+      if(last_enc_val>current_enc_val and t-last_turned_right_ts>rebound_delay_time){ //if the last enc val is larger than current(current_enc_val is decreasing) read current_enc
         myEnc.read();
         return current_enc_val;
+      }else{ // if the last_enc_val is larger than current_enc_val but rebound_delay_time has not elapsed, write last_enc_val to encoder
+        myEnc.write(last_enc_val);
+        return last_enc_val;
       }
     }
-    if(side==1){//need to turn left, encoder value must decrease
-      if(last_enc_val>current_enc_val){//if the last enc value is smaller than current(value is increasing) write last_enc_val to encoder
-        myEnc.write(last_enc_val-1);//for some reason, we need to have this +/- 1 so that it doesn't update the encoder value
+    if(side==1){//need to turn right, encoder value must increase
+      if(last_enc_val>current_enc_val){// if last enc value is larger than current(current_enc_val is decreasing) write last_enc_val to encoder
+        myEnc.write(last_enc_val);
+        last_turned_left_ts=t;
         return last_enc_val;
       }
-      else{
+      if(last_enc_val<current_enc_val and t-last_turned_left_ts>rebound_delay_time){ //if the last enc val is less than current(current_enc_val is increasing) read current_enc
         myEnc.read();
         return current_enc_val;
+      }else{
+        myEnc.write(last_enc_val);
+        return last_enc_val;
       }
     }
   }
@@ -877,6 +899,5 @@ void ShuffleTrialTypes () {
     int temp = trial_type_array[n];
     trial_type_array[n] = trial_type_array[i];
     trial_type_array[i] = temp;
-    
   }
 }
