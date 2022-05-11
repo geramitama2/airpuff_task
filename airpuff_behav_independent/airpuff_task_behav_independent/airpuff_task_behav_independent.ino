@@ -4,6 +4,10 @@
 //               Right --> Pattern B (X + 9kHz)
 // Left is 0, right is 1
 
+//This task will not adjust block length according to performance.
+// The block has a fixed ratio of trial types, and these trial types are predefined at each blockswitch event.
+// 1 block will have all turns in the same direction
+
 
 #include <SPI.h>
 #include <Wire.h>
@@ -32,17 +36,24 @@ File params;
 unsigned long sample_time = 10; //ms                                                                                                                              
 unsigned long timeOut_period = 20000;
 int quiescent_period= 1000;
-
 unsigned long air_puff_time_delay = 3000; // time between end of tone and airpuff
 unsigned long tone_length = 3000; // time between tone onset and tone offset
 int reward_delay = 3000; // time between screen to black and reward
 unsigned long ITI_setting = random(2000,4000);
 unsigned long ITI = ITI_setting;
+unsigned long t;
+unsigned long t_1;
+unsigned long loop_time=0;
+
+
+// ######SESSION SETTINGS######
+int save_to_sd = 0;    
+
+int rebound_delay_time = 250;
 
 int trial_limit = 20;
 
 const int block_length = 10;
-int extra_trials_in_type1 = 0;
 
 // proportions are used only for phase 2,3,4
 // remainder trials will be put into type1
@@ -50,7 +61,6 @@ double prop_type1 = .7; // only forced trials
 double prop_type2 = 0.1; // only tone + airpuff trials
 double prop_type3 = 0.1; // tone + forced
 double prop_type4 = 0.1; // tone + free
-int rebound_delay_time = 250;
 
 // type 1: forced trial no tone
 // type 2: tone only + air puff
@@ -66,43 +76,28 @@ int correct_trials_threshold = 250;
 int number_of_switches_threshold = 20;                                                                                                                           
 int consecutive_timeOut_threshold = 20; 
 
-int save_to_sd = 0;    
-
-
-// 0.
 double degrees_per_led = 6.0;
 
 int puff_delay = 10;
-// 1.
+
 int correct_side = 0;
-// 2.
-double forced_threshold_lower = 0.55;
-double forced_threshold_upper = 0.75;
-  // 3. 
+
 unsigned long sol_open_time = 40;
 unsigned long air_puff_open_time = 40;
-//4.
-//double common_transition_probability = 0.8;
-//5.
+
 double high_avoid_prob = 1; //prob of avoidance if turned to correct side
 double low_avoid_prob = 0;  //prob of avoidance if turned to incorrect side
-//6.
+
 int plus_trials = 0;
-//7.
 double switch_criteria_percent_accurate = .8;
-//8.
+
 unsigned long session_time_threshold = 90*60000;
 
 int switch_criteria_trials_range_low = 15; 
 int switch_criteria_trials_range_high = 25; 
 int switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
 
-
-
-
-
-
-// ########Static Settings######## //  
+// ########Hardware Settings######## //  
 
 int solenoid_pin = 8;
 int air_puff_pin = 9;
@@ -129,18 +124,20 @@ int pixels = 16;
 int left_bounds = 112;
 int right_bounds = 127;
 
-
-unsigned long t;
-unsigned long t_1;
-unsigned long loop_time=0;
-
-
 // #########LED screen values#####
 int initial_led_pos = 0;
 
 int led_pos = 0;
 int last_led_pos = 0;
 
+  
+// ######SESSION VARIABLES######
+
+double last_encoder_value = 0.0; // for quiescent phase
+int last_enc_val = 0; //for forced trials
+int enc_val;
+int state_value; 
+int trial_type;
 int phase;
 int second_state;
 int transition;
@@ -150,14 +147,6 @@ int turn;
 int reward=0;
 int solonoid_open;                                                                                                        
 int type;
-  
-// ######SESSION VARIABLES######
-
-double last_encoder_value = 0.0; // for quiescent phase
-int last_enc_val = 0; //for forced trials
-int enc_val;
-int state_value; 
-int trial_type;
 
 double percent_correct = 0.5;
 double weight_avg = 0.8825;
@@ -165,6 +154,7 @@ double weight_data = 1 - weight_avg;
 
 int extra_trials = 0;
 int enable_switch = 0;
+int extra_trials_in_type1 = 0;
 
 //incrementing values
 int trial_number = 1;
@@ -172,7 +162,6 @@ int correct_trials = 0;
 int incorrect_trials = 0;
 int timeOut_trials = 0;
 int consecutive_timeOut = 0;
-
 
 int correct_choices = 0;
 int trials_since_switch = 0;

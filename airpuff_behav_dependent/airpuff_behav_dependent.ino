@@ -4,6 +4,8 @@
 //               Right --> Pattern B (X + 9kHz)
 // Left is 0, right is 1
 
+// This task will adjust block length according to percent correct.
+
 
 #include <SPI.h>
 #include <Wire.h>
@@ -76,7 +78,7 @@ int switch_criteria_trials_range_low = 3;
 int switch_criteria_trials_range_high = 5; 
 int switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
 
-// ########Static Settings######## //  
+// ########Hardware Settings######## //  
 
 int solenoid_pin = 8;
 int air_puff_pin = 9;
@@ -99,6 +101,15 @@ int initial_led_pos = 0;
 
 int led_pos = 0;
 int last_led_pos = 0;
+
+// ######SESSION VARIABLES######
+
+double last_encoder_value = 0.0; // for quiescent phase
+int last_enc_val = 0; //for forced trials
+int enc_val;
+int state_value; 
+int trial_type;
+int forced = 0;
 int phase;
 int second_state;
 int transition;
@@ -109,15 +120,6 @@ int reward=0;
 int solonoid_open;                                                                                                        
 int type;
   
-// ######SESSION VARIABLES######
-
-double last_encoder_value = 0.0; // for quiescent phase
-int last_enc_val = 0; //for forced trials
-int enc_val;
-int state_value; 
-int trial_type;
-int forced = 0;
-
 double percent_correct = 0.5;
 double weight_avg = 0.8825;
 double weight_data = 1 - weight_avg; 
