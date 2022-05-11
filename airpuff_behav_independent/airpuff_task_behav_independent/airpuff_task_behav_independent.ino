@@ -32,7 +32,6 @@ File params;
 unsigned long sample_time = 10; //ms                                                                                                                              
 unsigned long timeOut_period = 20000;
 int quiescent_period= 1000;
-//unsigned long second_step_length = 2000;
 
 unsigned long air_puff_time_delay = 3000; // time between end of tone and airpuff
 unsigned long tone_length = 3000; // time between tone onset and tone offset
@@ -45,14 +44,13 @@ int trial_limit = 20;
 const int block_length = 10;
 int extra_trials_in_type1 = 0;
 
-int rebound_delay_time = 250;
-
 // proportions are used only for phase 2,3,4
 // remainder trials will be put into type1
-double prop_type1 = .8; // only forced trials
-double prop_type2 = 0.2; // only tone + airpuff trials
-double prop_type3 = 0; // tone + forced
-double prop_type4 = 0; // tone + free
+double prop_type1 = .7; // only forced trials
+double prop_type2 = 0.1; // only tone + airpuff trials
+double prop_type3 = 0.1; // tone + forced
+double prop_type4 = 0.1; // tone + free
+int rebound_delay_time = 250;
 
 // type 1: forced trial no tone
 // type 2: tone only + air puff
@@ -78,16 +76,30 @@ int puff_delay = 10;
 // 1.
 int correct_side = 0;
 // 2.
-
+double forced_threshold_lower = 0.55;
+double forced_threshold_upper = 0.75;
+  // 3. 
 unsigned long sol_open_time = 40;
 unsigned long air_puff_open_time = 40;
+//4.
+//double common_transition_probability = 0.8;
 //5.
 double high_avoid_prob = 1; //prob of avoidance if turned to correct side
 double low_avoid_prob = 0;  //prob of avoidance if turned to incorrect side
 //6.
 int plus_trials = 0;
+//7.
+double switch_criteria_percent_accurate = .8;
 //8.
 unsigned long session_time_threshold = 90*60000;
+
+int switch_criteria_trials_range_low = 15; 
+int switch_criteria_trials_range_high = 25; 
+int switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
+
+
+
+
 
 
 // ########Static Settings######## //  
@@ -179,7 +191,7 @@ Encoder myEnc(2,3);
 
 void setup() {
   Serial.begin(115200);
-//  lcd.begin();
+  lcd.begin();
   // Turn on the blacklight and print a message.
   lcd.backlight();
   randomSeed(analogRead(R));
@@ -197,7 +209,7 @@ void setup() {
   t_1 = millis(); //stored time
 
   
-  if(prop_type1+prop_type2+prop_type3!=1.0){
+  if(prop_type1+prop_type2+prop_type3+prop_type4!=1.0){
     Serial.println("Trial type proportions do not add up to 100%");
     delay(100);
     exit(0);
@@ -312,18 +324,28 @@ void setup() {
       params.println("air_puff_time_delay:"+String(air_puff_time_delay));
       params.println("reward_delay:"+String(reward_delay));
       params.println("ITI_setting:"+String(ITI_setting));
-      params.println("degrees_per_led:"+String(degrees_per_led));
+      params.println("degrees_per_led:"+String(degrees_per_led));  
+      params.println("switch_criteria_trials_range_low:"+String(switch_criteria_trials_range_low));
+      params.println("switch_criteria_trials_range_high:"+String(switch_criteria_trials_range_high));
+      params.println("switch_criteria_percent_accurate:"+String(switch_criteria_percent_accurate));
       params.println("session_time_threshold:"+String(session_time_threshold));
       params.println("number_of_switches_threshold:"+String(number_of_switches_threshold));
+      params.println("switch_criteria_trials:"+String(switch_criteria_trials));
       params.println("trial_limit:"+String(trial_limit));
       params.println("correct_trials_threshold:"+String(correct_trials_threshold));
       params.println("consecutive_timeOut_threshold:"+String(consecutive_timeOut_threshold));
       
       params.println("correct_side:"+String(correct_side));
+      params.println("forced_threshold_upper:"+String(forced_threshold_upper));
+      params.println("forced_threshold_lower:"+String(forced_threshold_lower));
       params.println("sol_open_time:"+String(sol_open_time));
+//      params.println("common_transition_probability:"+String(common_transition_probability));
       params.println("high_reward_prob:"+String(high_avoid_prob));
       params.println("low_reward_prob:"+String(low_avoid_prob));
       params.println("plus_trials:"+String(plus_trials));   
+      params.println("switch_criteria_trials_range_low:"+String(switch_criteria_trials_range_low));    
+      params.println("switch_criteria_trials_range_high:"+String(switch_criteria_trials_range_high));    
+           
       params.close();
     }
     
@@ -643,7 +665,7 @@ void loop() {
       case 10: // Turn off air puff solonoid
        if ((t-t_1) >= air_puff_open_time) {
          digitalWrite(air_puff_pin, LOW);
-         if (trial_type==2 or correct!=2){ // trial_type 2 or 
+         if (trial_type==2 or correct!=2){
           phase = 6;
          }else{
           phase = 8;
@@ -848,29 +870,28 @@ int get_led_position(double angle,double degrees_per_led,int leds){
 }
 
 
-int force_encoder(int forced, int side,int last_enc_val,int current_enc_val,unsigned long t){
+
+int force_encoder(int forced, int side,int last_enc_val,int current_enc_val){
   if(forced==1){
-    if(side==0){//need to turn left, encoder value must decrease
-      if(last_enc_val<current_enc_val){//if the last enc value is smaller than current(current_enc_val is increasing) write last_enc_val to encoder
+    if(side==0){
+      if(led_pos>=119 and last_enc_val<current_enc_val){
         myEnc.write(last_enc_val);
         last_turned_right_ts=t;
         return last_enc_val;
-      }
-      if(last_enc_val>current_enc_val and t-last_turned_right_ts>rebound_delay_time){ //if the last enc val is larger than current(current_enc_val is decreasing) read current_enc
+      }if(t-last_turned_right_ts>rebound_delay_time){
         myEnc.read();
         return current_enc_val;
-      }else{ // if the last_enc_val is larger than current_enc_val but rebound_delay_time has not elapsed, write last_enc_val to encoder
+      }else{
         myEnc.write(last_enc_val);
         return last_enc_val;
       }
     }
-    if(side==1){//need to turn right, encoder value must increase
-      if(last_enc_val>current_enc_val){// if last enc value is larger than current(current_enc_val is decreasing) write last_enc_val to encoder
+    if(side==1){
+      if(led_pos<=119 and last_enc_val>current_enc_val){
         myEnc.write(last_enc_val);
         last_turned_left_ts=t;
         return last_enc_val;
-      }
-      if(last_enc_val<current_enc_val and t-last_turned_left_ts>rebound_delay_time){ //if the last enc val is less than current(current_enc_val is increasing) read current_enc
+      }if(t-last_turned_left_ts>rebound_delay_time){ //if the last enc val is less than current(current_enc_val is increasing) read current_enc
         myEnc.read();
         return current_enc_val;
       }else{

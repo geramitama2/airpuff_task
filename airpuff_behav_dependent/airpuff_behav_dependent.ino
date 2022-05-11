@@ -26,78 +26,60 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN);
 File myFile;
 File LOG;
 File params;
-
-
-// CHANGING VARIABLES
-unsigned long sample_time = 10; //ms                                                                                                                              
-unsigned long timeOut_period = 20000;
-int quiescent_period= 1000;
-//unsigned long second_step_length = 2000;
-
-unsigned long air_puff_time_delay = 3000; // time between end of tone and airpuff
-unsigned long tone_length = 3000; // time between tone onset and tone offset
-int reward_delay = 3000; // time between screen to black and reward
-unsigned long ITI_setting = random(2000,4000);
-unsigned long ITI = ITI_setting;
-
-int trial_limit = 20;
-const int block_length = random(1,6);
-
-int rebound_delay_time = 250;
-
-int correct_trials_threshold = 250;
-int number_of_switches_threshold = 20;                                                                                                                           
-int consecutive_timeOut_threshold = 20; 
-
-int save_to_sd = 0;    
-
-
-// 0.
-double degrees_per_led = 6.0;
-
-int puff_delay = 10;
-// 1.
-int correct_side = 0;
-// 2.
-double forced_threshold_lower = 0.55;
-double forced_threshold_upper = 0.75;
-  // 3. 
-unsigned long sol_open_time = 40;
-unsigned long air_puff_open_time = 40;
-//4.
-//double common_transition_probability = 0.8;
-//5.
-double high_reward_prob = 1;
-double low_reward_prob = 0;
-//6.
-int plus_trials = 0;
-//7.
-double switch_criteria_percent_accurate = .8;
-//8.
-unsigned long session_time_threshold = 90*60000;
-
-int switch_criteria_trials_range_low = 15; 
-int switch_criteria_trials_range_high = 25; 
-int switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
-
-
-
-
-
-
-// ########Static Settings######## //  
-
-int solenoid_pin = 8;
-int air_puff_pin = 9;
 int pinCS = 53;
 String tlt;
 int Andy;
 #define R A10
 
-int forced = 1;
 int done = 0;
 int first_save = 1;
 int ct = 0;
+
+// Timing
+unsigned long sample_time = 10; //ms                                                                                                                              
+unsigned long timeOut_period = 20000;
+int quiescent_period= 1000;
+unsigned long air_puff_time_delay = 3000; // time between end of tone and airpuff
+unsigned long tone_length = 3000; // time between tone onset and tone offset
+int reward_delay = 3000; // time between screen to black and reward
+unsigned long ITI_setting = random(2000,4000);
+unsigned long ITI = ITI_setting;
+int rebound_delay_time = 250;
+unsigned long t;
+unsigned long t_1;
+unsigned long loop_time=0;
+
+
+//########Session Settings######## //  
+int save_to_sd = 0;    
+
+int trial_limit = 20;
+const int block_length = 10;
+int correct_trials_threshold = 250;
+int number_of_switches_threshold = 20;                                                                                                                           
+int consecutive_timeOut_threshold = 20; 
+
+double degrees_per_led = 6.0;
+int puff_delay = 10;
+int correct_side = 0;
+unsigned long sol_open_time = 40;
+unsigned long air_puff_open_time = 40;
+double high_avoid_prob = 1; //prob of avoidance if turned to correct side
+double low_avoid_prob = 0;  //prob of avoidance if turned to incorrect side
+double choice_prob = .90; // probability of a trial being a choice trial, as opposed to a puff trial
+double forced_prob = .10; // probability of a choice trial being forced
+int plus_trials = 0; // number of trials after a switch is enabled
+double switch_criteria_percent_accurate = .8;
+unsigned long session_time_threshold = 90*60000;
+
+int switch_criteria_trials_range_low = 3; 
+int switch_criteria_trials_range_high = 5; 
+int switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
+
+// ########Static Settings######## //  
+
+int solenoid_pin = 8;
+int air_puff_pin = 9;
 
 uint32_t white = strip.Color(255, 255, 255);
 uint32_t red = strip.Color(255, 0,0);
@@ -112,18 +94,11 @@ int pixels = 16;
 int left_bounds = 112;
 int right_bounds = 127;
 
-
-unsigned long t;
-unsigned long t_1;
-unsigned long loop_time=0;
-
-
 // #########LED screen values#####
 int initial_led_pos = 0;
 
 int led_pos = 0;
 int last_led_pos = 0;
-
 int phase;
 int second_state;
 int transition;
@@ -141,6 +116,7 @@ int last_enc_val = 0; //for forced trials
 int enc_val;
 int state_value; 
 int trial_type;
+int forced = 0;
 
 double percent_correct = 0.5;
 double weight_avg = 0.8825;
@@ -166,7 +142,6 @@ int choices_total_left = 0;
 int choices_total_right = 0;
 
 bool recently_saved = false;
-int next_trial_type_indx = 0;
 unsigned long last_turned_right_ts=0;
 unsigned long last_turned_left_ts=0;
 
@@ -174,7 +149,7 @@ Encoder myEnc(2,3);
 
 void setup() {
   Serial.begin(115200);
-//  lcd.begin();
+  lcd.begin();
   // Turn on the blacklight and print a message.
   lcd.backlight();
   randomSeed(analogRead(R));
@@ -201,7 +176,6 @@ void setup() {
 
   
   ITI = ITI_setting;
-
   pinMode(pinCS, OUTPUT);
   Andy = random(5000, 10001);
   tlt = String(Andy) + "_JS2.CSV";
@@ -286,11 +260,10 @@ void setup() {
       params.println("consecutive_timeOut_threshold:"+String(consecutive_timeOut_threshold));
       
       params.println("correct_side:"+String(correct_side));
-      params.println("forced_threshold_upper:"+String(forced_threshold_upper));
-      params.println("forced_threshold_lower:"+String(forced_threshold_lower));
       params.println("sol_open_time:"+String(sol_open_time));
-      params.println("high_reward_prob:"+String(high_reward_prob));
-      params.println("low_reward_prob:"+String(low_reward_prob));
+//      params.println("common_transition_probability:"+String(common_transition_probability));
+      params.println("high_reward_prob:"+String(high_avoid_prob));
+      params.println("low_reward_prob:"+String(low_avoid_prob));
       params.println("plus_trials:"+String(plus_trials));   
       params.println("switch_criteria_trials_range_low:"+String(switch_criteria_trials_range_low));    
       params.println("switch_criteria_trials_range_high:"+String(switch_criteria_trials_range_high));    
@@ -311,6 +284,7 @@ void setup() {
 
 void loop() {
   t = millis(); //loop time
+  //Serial.println(String(t) + " " +String(session_time_threshold));
   if(t-loop_time>=sample_time){
     loop_time=t;
     if (number_of_switches >= number_of_switches_threshold or t>session_time_threshold or consecutive_timeOut>=consecutive_timeOut_threshold or trial_number>=trial_limit){
@@ -336,6 +310,28 @@ void loop() {
           strip.clear();
           strip.show();
           Serial.println("End Quiescent");
+
+          // Roll for trial type
+          int trial_type_roll = random(0,101);
+          Serial.println("Trial Type Roll:" + String(trial_type_roll) +"<" + String(choice_prob) +"? 1:0");
+          trial_type = trial_type_roll<choice_prob*100 ? 1:0;// will the trial be a choice trial(1) or a puff trial(0)
+          if (trial_type ==1){
+            // if its a choice trial, decide if the trial will be forced or not
+            int forced_roll = random(0,101);
+            Serial.println("Forced Roll:" + String(forced_roll) +"<" + String(forced_prob) +"? 1:0");
+            forced = forced_roll<forced_prob*100? 1:0;
+          }
+          Serial.println("Trial Type:" + String(trial_type) + "| Forced:" +String(forced));
+          
+          if(trial_type==1){
+            setTarget2(forced, correct_side);
+            phase = 2;
+            Serial.println("Forced: " + String(forced));
+            Serial.println("Correct Side: " + String(correct_side));
+          }
+          if(trial_type==0){
+            phase=4;// air puff phase
+          }
         }
         break;
       
@@ -354,26 +350,28 @@ void loop() {
         fix_encoder();
         // if it is a forced trial, only one side will be read in
         // if it is not a forced trial, both sides will be read normally
-        enc_val = force_encoder(forced,correct_side,last_enc_val,myEnc.read(),t); 
+        enc_val = force_encoder(forced,correct_side,last_enc_val,myEnc.read()); 
 
+        
+        if(trial_type==1){ // tone should play until move out of phase 3
+          tone(toneA_pin,10000,100);
+        }
         led_pos = 119 +get_led_position(((360.0*enc_val))/resolution,degrees_per_led,pixels);
         led_pos = constrain(led_pos,left_bounds,right_bounds); 
         verticalLinesOn(led_pos);
         
         if (last_led_pos!=led_pos){
-            verticalLinesOff(last_led_pos);
-            strip.show();
+          verticalLinesOff(last_led_pos);
+          strip.show();
         }
         last_enc_val = enc_val;
         last_led_pos = led_pos;
 
-        if(led_pos<=115){    //previously 112
-          
+        if(led_pos<=115){
           choices_total_left++;
           turn = 0;
         }
-        if(led_pos>=123){   //previously 127
-       
+        if(led_pos>=123){   
           choices_total_right++;
           turn = 1;
         }
@@ -384,7 +382,7 @@ void loop() {
           strip.clear();
           strip.show();
           t_1 = t;
-          phase = 5; // outcome roll phase
+          phase=5; // outcome roll phase
           
           if (correct_side == 0) {// left side is correct side
             last_led_pos = 0;
@@ -396,72 +394,88 @@ void loop() {
               correct = 1;  
              }
              if (turn == 1) {
+              // incorrect choices are only possible with free trials
               Serial.println("Incorrect Choice!");
               incorrect_trials +=1;
               correct = 0;
              }
-         }
-         
+          }
           if (correct_side == 1) {
             last_led_pos = 0;
-            led_pos = 0;
-                        
+            led_pos = 0;           
             if (turn == 0) {
+              // incorrect choices are only possible with free trials
               Serial.println("Incorrect Choice!");
               incorrect_trials +=1;
               correct = 0;
-           }
+            }
             if (turn == 1) {
-            Serial.println("Correct Choice!");
-            correct_trials +=1;
-            correct = 1;
+              Serial.println("Correct Choice!");
+              correct_trials +=1;
+              correct = 1;
+            }
           }
-       }
-       break;
-     }
+          break;
+        }
         if((t-t_1)>=timeOut_period) {//timeout
-        correct = 2;
-        consecutive_timeOut++;
-        timeOut_trials +=1;
-        strip.clear();
-        strip.show();
-        myEnc.readAndReset();
-        phase = 4; // no reward timeout phase
-        t_1 = t;
-
-        Serial.println("Time Out");
-        break;
-      }
-
+          correct = 2;
+          consecutive_timeOut++;
+          timeOut_trials +=1;
+          strip.clear();
+          strip.show();
+          myEnc.readAndReset();
+          phase = 4; // no reward timeout phase
+          if(trial_type==1){ // go to timeout for type 3/4
+            phase=4;
+          }
+          t_1 = t;
+    
+          Serial.println("Time Out");
+          break;
+        }
       break;
   
-      //no reward/timeout phase
+      //no reward/air puff/timeout phase
       case 4:  
+        // this phase will give a tone and move to puff 
         tone(toneA_pin,10000,5000);
         t_1 = t;   
-        phase = 8;
+        phase = 9; //puff on
         strip.clear();
         strip.show();
         myEnc.readAndReset();
         break;
         
-      //reward roll phase
+      //non-timeout  phase
       case 5:
       
         strip.clear();
         strip.show();
         
-        t_1 = t; 
-        if(correct==1){
-          phase = 6;// turn on reward solenoid
-          reward =1;
-          correct_trials +=1;
-          Serial.println("Reward!");
-        }else {
-          phase=8;
-          Serial.println("No Reward!");
+        if(trial_type==1){
+          t_1 = t;
+          int roll = random(0,101);
+          Serial.println("Avoid Roll: " + String(roll));
+          // if the turn was correct, follow high avoid prob, else follow low avoid prob
+          if(correct==1){
+            if(roll<high_avoid_prob*100){ // high avoid prob if correct
+              phase=6; // reward
+              Serial.println("Avoid and Reward!");
+            }else{
+              phase=9; // air puff
+              Serial.println("Air Puff!");
+            }
+          }else{
+            if(roll<low_avoid_prob*100){
+              phase=6; // avoid and reward
+              Serial.println("Avoid and Reward!");
+            }else{
+              phase=9; // puff
+              Serial.println("Air Puff!");
+            }
+          }
         }
-         
+            
         lcd.setCursor(0,1);
         lcd.print(String(correct_side) + " " + String(turn) + " " + String(transition) + " " + String(reward) + " " + String(forced));
 
@@ -472,32 +486,51 @@ void loop() {
           digitalWrite(solenoid_pin, HIGH);
           phase = 7;
           t_1 = t;
-          Serial.println("Reward");
+          Serial.println("Reward delivery.");
         }
         break;
         
       case 7: // Turn off solonoid
          if ((t-t_1) >= sol_open_time) {
-         digitalWrite(solenoid_pin, LOW);
-         phase = 8;
-         t_1= t;
-         //Serial.println("ITI start at: " + String(t));
+           digitalWrite(solenoid_pin, LOW);
+           phase = 8;
+           t_1= t;
          }
         break;
         
-      case 8:
-        
+      case 8:  
         if ((t-t_1) >= ITI) {
-          if(trials_since_switch>block_length){
-            number_of_switches++;
-            trials_since_switch=0;
-            if(correct_side==0){
-              correct_side = 1;
-            }else{
-              correct_side = 0;
+          if(correct!=2){// non-timeout
+            percent_correct = (percent_correct * weight_avg) + (correct * weight_data);
+          }
+          if (trials_since_switch>=switch_criteria_trials and enable_switch==0) {//enable switch if enough trials have occured, and percent_correct is high enougb
+            if (percent_correct>=switch_criteria_percent_accurate) {
+              enable_switch = 1;
+              lcd.clear();
+              lcd.setCursor(0,0);
+              lcd.print("Switch Enabled");
             }
           }
-
+          if (enable_switch == 1) {
+            if (extra_trials < plus_trials) { extra_trials++; } // if the switch is enabled but extra_trials<plus_trials, iterate extra_trials(keeping block switch enabled)
+            if (extra_trials >= plus_trials){//switch if entra_trials criteria is met
+              if (correct_side == 0){
+                correct_side = 1;
+              }else{
+                correct_side = 0;
+              }
+              //randomly set the number of trials in the next block
+              switch_criteria_trials = random(switch_criteria_trials_range_low,switch_criteria_trials_range_high+1);
+              Serial.println("New Block Achieved!");
+              lcd.clear();
+              lcd.print("New Corr. Side ="+String(correct_side));
+              trials_since_switch = 0;
+              extra_trials = 0;
+              enable_switch = 0;
+              number_of_switches++;
+              percent_correct = 1-percent_correct;
+            }
+          }
           lcd.clear();
           lcd.setCursor(0,0);
           lcd.print(String(trial_number) + " " + String(number_of_switches) + " " + String(trials_since_switch));
@@ -505,8 +538,11 @@ void loop() {
           
           strip.clear();
           strip.show();
-          trial_number++;
-          trials_since_switch++;
+          // only iterate trial number on choice trials
+          if(trial_type==1){
+            trial_number++;
+            trials_since_switch++;
+          }
           correct_choices = 0;
           ITI = random(2000,4000);        
           phase = 1;
@@ -521,6 +557,26 @@ void loop() {
         }
         break;
         
+      case 9: // turn on air puff solonoid after some delay time
+        if((t-t_1)>=air_puff_time_delay){
+          digitalWrite(air_puff_pin, HIGH);
+          phase = 10;
+          t_1 = t;
+          Serial.println("Air Puff");
+        }
+        break;
+        
+      case 10: // Turn off air puff solonoid
+       if ((t-t_1) >= air_puff_open_time) {
+         digitalWrite(air_puff_pin, LOW);
+         if (correct!=2){
+          phase = 6;
+         }else{
+          phase = 8;
+         }
+         t_1= t;
+        }
+        break;
     }
 
     // SD Card saving
@@ -531,22 +587,20 @@ void loop() {
         lcd.clear();
         lcd.print("Done!");
       }
+      
       if (done == 0) {;
         if (first_save == 1) {
             first_save = 0; myFile = SD.open(tlt, FILE_WRITE);
- }
-        
+        }
         if (myFile) {
-
-            myFile.println(String(t) + ','+ String(trial_number) +',' + String(phase)+ ','+ String(correct_side)+ ','+ String(turn)+ ',' + String(correct)+ ',' + String(reward) + ',' + String(transition) + ',' + String(second_state) + ',' + String((360.0*enc_val)/resolution) + ',' + String(digitalRead(7)) + ',' + String(forced));
-
+          myFile.println(String(t) + ','+ String(trial_number) +',' + String(phase)+ ','+ String(correct_side)+ ','+ String(turn)+ ',' + String(correct)+ ',' + String(reward) + ',' + String(transition) + ',' + String(second_state) + ',' + String((360.0*enc_val)/resolution) + ',' + String(digitalRead(7)) + ',' + String(forced));
         }
         else {
           phase = 0;
           lcd.clear();
           lcd.print("Not saving right");
         }
-      }
+      }      
     }
   }
 }
@@ -626,50 +680,6 @@ void verticalLinesOff(int led1){
   }
 }
 
-void patternA(){ // Circle
-  int light = 68;
-  int light1 = 75;
-  for(int i=0;i<7;i++){
-    strip.setPixelColor((16*i)+light,white);
-    strip.setPixelColor((16*i)+light1,white);
-  }
-  strip.fill(white,68,8);
-  strip.fill(white,180,8);
-  strip.show();
-}
-
-void patternB(){  // X
-  int long_counter = 7;
-  int short_counter = 10;
-  int current_pixel = 68;
-  for (int i =0;i<8;i++){
-    strip.setPixelColor(current_pixel,white);
-    current_pixel = current_pixel+long_counter;
-    long_counter = long_counter-2;
-    strip.setPixelColor(current_pixel,white);
-    current_pixel = current_pixel+short_counter;
-    if(current_pixel>200){
-      break;
-    }
-    strip.setPixelColor(current_pixel,white);
-    short_counter=short_counter+2;
-  }
-  strip.show();
-}
-
-#define LFSR_INIT  0xfeedfaceUL
-#define LFSR_MASK  ((unsigned long)( 1UL<<31 | 1UL <<15 | 1UL <<2 | 1UL <<1  ))
-unsigned int generateNoise(){ 
-  // See https://en.wikipedia.org/wiki/Linear_feedback_shift_register#Galois_LFSRs
-   static unsigned long int lfsr = LFSR_INIT;  /* 32 bit init, nonzero */
-   /* If the output bit is 1, apply toggle mask.
-                                    * The value has 1 at bits corresponding
-                                    * to taps, 0 elsewhere. */
-
-   if(lfsr & 1) { lfsr =  (lfsr >>1) ^ LFSR_MASK ; return(1);}
-   else         { lfsr >>= 1;                      return(0);}
-}
-
 ////ROTARY ENCODER CODE
 //  setting the min and max raw encoder reading values. 
 //  This prevents the value from continuing to increase despite constraints
@@ -683,10 +693,6 @@ void fix_encoder(){
       myEnc.write(((degrees_per_led*pixels-3)*resolution)/360);
     }
 }
-
-
-
-
 
 int get_led_position(double angle,double degrees_per_led,int leds){
   int led_pos = 0;
@@ -718,29 +724,27 @@ int get_led_position(double angle,double degrees_per_led,int leds){
 }
 
 
-int force_encoder(int forced, int side,int last_enc_val,int current_enc_val,unsigned long t){
+int force_encoder(int forced, int side,int last_enc_val,int current_enc_val){
   if(forced==1){
-    if(side==0){//need to turn left, encoder value must decrease
-      if(last_enc_val<current_enc_val){//if the last enc value is smaller than current(current_enc_val is increasing) write last_enc_val to encoder
+    if(side==0){
+      if(led_pos>=119 and last_enc_val<current_enc_val){
         myEnc.write(last_enc_val);
         last_turned_right_ts=t;
         return last_enc_val;
-      }
-      if(last_enc_val>current_enc_val and t-last_turned_right_ts>rebound_delay_time){ //if the last enc val is larger than current(current_enc_val is decreasing) read current_enc
+      }if(t-last_turned_right_ts>rebound_delay_time){
         myEnc.read();
         return current_enc_val;
-      }else{ // if the last_enc_val is larger than current_enc_val but rebound_delay_time has not elapsed, write last_enc_val to encoder
+      }else{
         myEnc.write(last_enc_val);
         return last_enc_val;
       }
     }
-    if(side==1){//need to turn right, encoder value must increase
-      if(last_enc_val>current_enc_val){// if last enc value is larger than current(current_enc_val is decreasing) write last_enc_val to encoder
+    if(side==1){
+      if(led_pos<=119 and last_enc_val>current_enc_val){
         myEnc.write(last_enc_val);
         last_turned_left_ts=t;
         return last_enc_val;
-      }
-      if(last_enc_val<current_enc_val and t-last_turned_left_ts>rebound_delay_time){ //if the last enc val is less than current(current_enc_val is increasing) read current_enc
+      }if(t-last_turned_left_ts>rebound_delay_time){ //if the last enc val is less than current(current_enc_val is increasing) read current_enc
         myEnc.read();
         return current_enc_val;
       }else{
@@ -754,12 +758,3 @@ int force_encoder(int forced, int side,int last_enc_val,int current_enc_val,unsi
     return current_enc_val;
   }
 }
-
-//void ShuffleTrialTypes () {
-//  for (int i = 0; i < sizeof(trial_type_array) / sizeof(trial_type_array[0]); i++) {
-//    int n = random(0,sizeof(trial_type_array) / sizeof(trial_type_array[0]));
-//    int temp = trial_type_array[n];
-//    trial_type_array[n] = trial_type_array[i];
-//    trial_type_array[i] = temp;
-//  }
-//}
