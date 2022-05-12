@@ -550,7 +550,7 @@ void loop() {
           Serial.println("Avoid Roll: " + String(roll));
           // if the turn was correct, follow high avoid prob, else follow low avoid prob
           if(correct==1){
-            if(roll>high_avoid_prob){
+            if(roll<high_avoid_prob*100){
               phase=9; // air puff
               Serial.println("Air puff!");
             }else{
@@ -558,7 +558,7 @@ void loop() {
               Serial.println("Reward!");
             }
           }else{
-            if(roll>low_avoid_prob){
+            if(roll<low_avoid_prob*100){
               phase=9;
               Serial.println("Air puff!");
             }else{
@@ -798,19 +798,6 @@ void patternB(){  // X
   strip.show();
 }
 
-#define LFSR_INIT  0xfeedfaceUL
-#define LFSR_MASK  ((unsigned long)( 1UL<<31 | 1UL <<15 | 1UL <<2 | 1UL <<1  ))
-unsigned int generateNoise(){ 
-  // See https://en.wikipedia.org/wiki/Linear_feedback_shift_register#Galois_LFSRs
-   static unsigned long int lfsr = LFSR_INIT;  /* 32 bit init, nonzero */
-   /* If the output bit is 1, apply toggle mask.
-                                    * The value has 1 at bits corresponding
-                                    * to taps, 0 elsewhere. */
-
-   if(lfsr & 1) { lfsr =  (lfsr >>1) ^ LFSR_MASK ; return(1);}
-   else         { lfsr >>= 1;                      return(0);}
-}
-
 ////ROTARY ENCODER CODE
 //  setting the min and max raw encoder reading values. 
 //  This prevents the value from continuing to increase despite constraints
@@ -824,10 +811,6 @@ void fix_encoder(){
       myEnc.write(((degrees_per_led*pixels-3)*resolution)/360);
     }
 }
-
-
-
-
 
 int get_led_position(double angle,double degrees_per_led,int leds){
   int led_pos = 0;
