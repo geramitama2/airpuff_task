@@ -53,7 +53,7 @@ unsigned long loop_time=0;
 
 
 //########Session Settings######## //  
-int save_to_sd = 0;    
+int save_to_sd = 1;    
 
 int trial_limit = 20;
 const int block_length = 10;
